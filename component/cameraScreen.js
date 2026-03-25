@@ -9,7 +9,7 @@ import {
   ScrollView,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { File } from "expo-file-system";
+import { colors, fonts, shadows } from "../app/theme";
 
 const API_TOKEN = process.env.EXPO_PUBLIC_PLATE_RECOGNIZER_API_TOKEN; // Replace with your actual API token
 
@@ -21,6 +21,8 @@ export default function CameraScreen() {
   const [loading, setLoading] = useState(false);
   const [plateData, setPlateData] = useState(null);
   const [error, setError] = useState(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   if (!permission) {
     return (
@@ -47,13 +49,13 @@ export default function CameraScreen() {
     setPlateData(null);
 
     try {
-      // Use the new File API to read as base64
-      const file = new File(photoUri);
-      const base64 = await file.base64();
-
-      // Create form data
+      // Send the captured image file as multipart/form-data.
       const formData = new FormData();
-      formData.append("upload", base64);
+      formData.append("upload", {
+        uri: photoUri,
+        name: `plate-${Date.now()}.jpg`,
+        type: "image/jpeg",
+      });
       // Optional: Add regions for better accuracy
       // formData.append("regions", "us-ca"); // Example: California
       // formData.append("mmc", "true"); // Enable vehicle make/model/color
@@ -88,20 +90,32 @@ export default function CameraScreen() {
   };
 
   const takePhoto = async () => {
-    if (cameraRef.current) {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 1,
+    if (!cameraRef.current || !isCameraReady || isCapturing) {
+      return;
+    }
+
+    try {
+      setIsCapturing(true);
+      const capturedPhoto = await cameraRef.current.takePictureAsync({
+        quality: 0.8,
         base64: false,
+        skipProcessing: true,
       });
-      setPhoto(photo);
-      console.log("Photo URI:", photo.uri);
+      setPhoto(capturedPhoto);
+      console.log("Photo URI:", capturedPhoto.uri);
 
       // Automatically send to plate recognizer API
-      await recognizePlate(photo.uri);
+      await recognizePlate(capturedPhoto.uri);
+    } catch (captureError) {
+      console.error("Camera capture error:", captureError);
+      setError("Failed to take photo. Please try again.");
+    } finally {
+      setIsCapturing(false);
     }
   };
 
   const switchCamera = () => {
+    setIsCameraReady(false);
     setFacing((current) => (current === "back" ? "front" : "back"));
   };
 
@@ -109,6 +123,7 @@ export default function CameraScreen() {
     setPhoto(null);
     setPlateData(null);
     setError(null);
+    setIsCameraReady(false);
   };
 
   if (photo) {
@@ -119,7 +134,7 @@ export default function CameraScreen() {
 
           {loading && (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#fff" />
+              <ActivityIndicator size="large" color={colors.white} />
               <Text style={styles.loadingText}>Analyzing plate...</Text>
             </View>
           )}
@@ -185,7 +200,12 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing} />
+      <CameraView
+        ref={cameraRef}
+        style={styles.camera}
+        facing={facing}
+        onCameraReady={() => setIsCameraReady(true)}
+      />
 
       <View style={styles.controls}>
         <TouchableOpacity style={styles.flipButton} onPress={switchCamera}>
@@ -194,7 +214,14 @@ export default function CameraScreen() {
       </View>
 
       <View style={styles.bottomControls}>
-        <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
+        <TouchableOpacity
+          style={[
+            styles.captureButton,
+            (!isCameraReady || isCapturing) && styles.captureButtonDisabled,
+          ]}
+          onPress={takePhoto}
+          disabled={!isCameraReady || isCapturing}
+        >
           <View style={styles.captureButtonInner} />
         </TouchableOpacity>
       </View>
@@ -205,7 +232,7 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "black",
+    backgroundColor: colors.onyx,
   },
   scrollView: {
     flex: 1,
@@ -221,9 +248,10 @@ const styles = StyleSheet.create({
   },
   message: {
     textAlign: "center",
-    color: "white",
+    color: colors.white,
     marginBottom: 20,
     fontSize: 16,
+    fontFamily: fonts.body,
   },
   controls: {
     position: "absolute",
@@ -231,14 +259,15 @@ const styles = StyleSheet.create({
     right: 20,
   },
   flipButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    backgroundColor: "rgba(242, 244, 243, 0.2)",
     padding: 15,
     borderRadius: 10,
   },
   flipText: {
-    color: "white",
+    color: colors.white,
     fontSize: 16,
     fontWeight: "bold",
+    fontFamily: fonts.body,
   },
   bottomControls: {
     position: "absolute",
@@ -251,17 +280,21 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: "white",
+    backgroundColor: colors.white,
     justifyContent: "center",
     alignItems: "center",
+    ...shadows.lift,
+  },
+  captureButtonDisabled: {
+    opacity: 0.5,
   },
   captureButtonInner: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "white",
+    backgroundColor: colors.white,
     borderWidth: 3,
-    borderColor: "black",
+    borderColor: colors.onyx,
   },
   previewControls: {
     position: "absolute",
@@ -271,7 +304,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   button: {
-    backgroundColor: "white",
+    backgroundColor: colors.coral,
     padding: 15,
     borderRadius: 10,
     minWidth: 150,
@@ -280,59 +313,66 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "black",
+    color: colors.onyx,
+    fontFamily: fonts.body,
   },
   loadingContainer: {
     alignItems: "center",
     marginTop: 20,
   },
   loadingText: {
-    color: "white",
+    color: colors.white,
     marginTop: 10,
     fontSize: 16,
+    fontFamily: fonts.body,
   },
   errorContainer: {
-    backgroundColor: "rgba(255, 0, 0, 0.3)",
+    backgroundColor: colors.softCoral,
     padding: 15,
     margin: 20,
     borderRadius: 10,
   },
   errorText: {
-    color: "white",
+    color: colors.violet,
     fontSize: 14,
+    fontFamily: fonts.body,
   },
   resultsContainer: {
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    backgroundColor: "rgba(7, 17, 8, 0.8)",
     padding: 20,
     margin: 20,
     borderRadius: 10,
   },
   resultsTitle: {
-    color: "white",
+    color: colors.white,
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 15,
+    fontFamily: fonts.display,
   },
   plateResult: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(242, 244, 243, 0.1)",
     padding: 15,
     borderRadius: 10,
     marginBottom: 10,
   },
   plateNumber: {
-    color: "white",
+    color: colors.white,
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 10,
+    fontFamily: fonts.display,
   },
   plateInfo: {
-    color: "white",
+    color: colors.whiteSmoke,
     fontSize: 14,
     marginBottom: 5,
+    fontFamily: fonts.body,
   },
   noPlatesText: {
-    color: "white",
+    color: colors.whiteSmoke,
     fontSize: 16,
     fontStyle: "italic",
+    fontFamily: fonts.body,
   },
 });

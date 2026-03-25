@@ -5,8 +5,6 @@ function extractToken(data) {
   if (typeof data === "string") return data;
   if (!data) return null;
   if (data.token) return data.token;
-  if (data.jwt) return data.jwt;
-  if (data.accessToken) return data.accessToken;
   return null;
 }
 
@@ -44,7 +42,7 @@ export async function login(email, password) {
       throw new Error("Login response did not include a token.");
     }
     await storeToken(token);
-    return token;
+    return data;
   } catch (error) {
     console.error("[LOGIN ERROR]", error);
     if (error.status) {
@@ -52,5 +50,19 @@ export async function login(email, password) {
       console.log("DATA:", error.data);
     }
     throw normalizeError(error);
+  }
+}
+
+export async function changePassword(oldPassword, newPassword) {
+  try {
+    const response = await apiClient.patch("/auth/change-password", {
+      oldPassword,
+      newPassword,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("[CHANGE PASSWORD ERROR]", error);
+    const message = error?.response?.data?.message || error?.message || "Failed to change password";
+    throw new Error(message);
   }
 }

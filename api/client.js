@@ -1,7 +1,8 @@
 import axios from "axios";
 import { getToken } from "./tokenStorage";
 
-export const BASE_URL = "http://10.106.1.86:8080";
+export const BASE_URL = "http://10.0.2.2:8080";
+// export const BASE_URL = "https://8cc1-102-93-7-116.ngrok-free.app"; //ngrok url for local development
 
 export const apiClient = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
